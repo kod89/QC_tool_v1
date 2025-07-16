@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -24,12 +23,11 @@ if os.path.exists(sample_path):
             mime="text/csv"
         )
 
-st.markdown("""
-Upload your QC test result file. The file should include the following columns:
-- 항목명 (Item)
-- 측정값 (Measured Value)
-- 기준하한 (Lower Limit)
-- 기준상한 (Upper Limit)
+st.markdown("""Upload your QC test result file. The file must include the following columns:
+- Item
+- Value
+- Lower Limit
+- Upper Limit
 """)
 
 uploaded_file = st.file_uploader("📁 Upload QC Test File (CSV or Excel)", type=["csv", "xlsx"])
@@ -44,12 +42,22 @@ if uploaded_file:
         st.error(f"Failed to load file: {e}")
         st.stop()
 
+    # Auto rename from Korean to English if necessary
+    rename_dict = {
+        "항목명": "Item",
+        "측정값": "Value",
+        "기준하한": "Lower Limit",
+        "기준상한": "Upper Limit"
+    }
+    df = df.rename(columns=rename_dict)
+
     required_cols = ["Item", "Value", "Lower Limit", "Upper Limit"]
     if not all(col in df.columns for col in required_cols):
         st.error("❌ Required columns are missing.")
+        st.write("Columns found:", df.columns.tolist())  # Debugging output
         st.stop()
 
-    # 판정 및 Z-score 계산
+    # Evaluation and Z-score
     df["Result"] = df.apply(lambda r: "Pass" if r["Lower Limit"] <= r["Value"] <= r["Upper Limit"] else "Fail", axis=1)
     df["Z-score"] = zscore(df["Value"])
     df["Outlier"] = df["Z-score"].apply(lambda z: "Yes" if abs(z) > 2 else "")
@@ -57,7 +65,7 @@ if uploaded_file:
     st.success("✅ File loaded and processed.")
     st.dataframe(df)
 
-    # 그래프
+    # Plot
     st.markdown("### 📈 Z-score Outlier Detection")
     fig, ax = plt.subplots()
     ax.bar(df["Item"], df["Z-score"])
@@ -68,7 +76,7 @@ if uploaded_file:
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # PDF 생성 함수
+    # PDF summary generator
     def generate_summary_pdf(df):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
@@ -95,7 +103,7 @@ if uploaded_file:
             table_data.append([
                 str(row["Item"]),
                 str(row["Value"]),
-                f"{row['기준하한']} ~ {row['기준상한']}",
+                f"{row['Lower Limit']} ~ {row['Upper Limit']}",
                 row["Result"]
             ])
 
@@ -113,7 +121,7 @@ if uploaded_file:
         buffer.seek(0)
         return buffer
 
-    # PDF 다운로드 버튼
+    # PDF download
     pdf_buffer = generate_summary_pdf(df)
     st.download_button(
         label="📄 Download Summary PDF",
