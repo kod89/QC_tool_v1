@@ -10,7 +10,6 @@ import os
 st.set_page_config(page_title="QC Report Analyzer", layout="centered")
 st.title("🧪 QC Test Report Analyzer")
 
-# Sample file download
 sample_path = "sample_qc_data_utf8sig.csv"
 if os.path.exists(sample_path):
     with open(sample_path, "rb") as f:
@@ -34,7 +33,6 @@ This tool automatically evaluates QC test results, detects outliers using Z-scor
 - 기준상한 (Upper Limit)
 """)
 
-# File uploader
 uploaded_file = st.file_uploader("📁 Upload QC Test File (CSV or Excel)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
@@ -58,23 +56,18 @@ if uploaded_file is not None:
     st.success("✅ File loaded successfully.")
     st.dataframe(df)
 
-    # Pass/Fail judgment
     def assess_row(row):
         if row["측정값"] < row["기준하한"] or row["측정값"] > row["기준상한"]:
             return "Fail"
         return "Pass"
 
     df["Result"] = df.apply(assess_row, axis=1)
-
-    # Z-score analysis
     df["Z-score"] = zscore(df["측정값"])
     df["Outlier"] = df["Z-score"].apply(lambda z: "Yes" if abs(z) > 2 else "")
 
-    # Display results
     st.markdown("### 📊 Judgment Result")
     st.dataframe(df)
 
-    # Plot Z-score
     st.markdown("### 📈 Z-score Outlier Detection")
     fig, ax = plt.subplots()
     ax.bar(df["항목명"], df["Z-score"])
@@ -86,7 +79,22 @@ if uploaded_file is not None:
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # PDF generation (fixed)
+    # 항목명 매핑 (한글 → 영어)
+    rename_map = {
+        "온도": "Temperature",
+        "색상": "Color",
+        "탁도": "Turbidity",
+        "pH": "pH",
+        "수분함량": "Moisture",
+        "점도": "Viscosity",
+        "비중": "Specific Gravity",
+        "항목1": "Item 1",
+        "항목2": "Item 2",
+        "항목3": "Item 3",
+        "항목4": "Item 4",
+        "항목5": "Item 5",
+    }
+
     def generate_pdf(dataframe):
         buffer = io.BytesIO()
         pdf = FPDF()
@@ -96,7 +104,8 @@ if uploaded_file is not None:
         pdf.ln(10)
 
         for i, row in dataframe.iterrows():
-            text = f"{row['항목명']}: Value={row['측정값']}, Spec=({row['기준하한']}–{row['기준상한']}), Result={row['Result']}, Outlier={row['Outlier']}"
+            item_name = rename_map.get(row["항목명"], row["항목명"])
+            text = f"{item_name}: Value={row['측정값']}, Spec=({row['기준하한']}–{row['기준상한']}), Result={row['Result']}, Outlier={row['Outlier']}"
             text = text.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(200, 10, txt=text, ln=True)
 
