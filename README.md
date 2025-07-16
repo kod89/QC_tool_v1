@@ -27,7 +27,7 @@ Z-score를 이용해 이상치를 탐지하며, PDF로 분석 결과를 요약�
 
 ## 📎 샘플 파일
 
-- [sample_qc_data_utf8sig.csv](sample_qc_data_utf8sig.csv): 샘플 입력 파일
+- [sample_qc_data_utf8sig.csv](sample_qc_data_updated.csv): 샘플 입력 파일
 
 ---
 
