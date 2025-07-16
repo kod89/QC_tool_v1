@@ -1,11 +1,14 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from fpdf import FPDF
 from scipy.stats import zscore
-import io
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
+from datetime import datetime
 import os
-import re
 
 st.set_page_config(page_title="QC Report Analyzer", layout="centered")
 st.title("🧪 QC Test Report Analyzer")
@@ -19,15 +22,10 @@ if os.path.exists(sample_path):
             file_name="sample_qc_data.csv",
             mime="text/csv"
         )
-else:
-    st.warning("⚠️ Sample file not found. Please include sample_qc_data_utf8sig.csv when deploying.")
 
 st.markdown("""
-This tool automatically evaluates QC test results, detects outliers using Z-score, and generates a PDF summary report.
-
-**💡 Input file must contain the following columns:**
-
-- 항목명 (Test Item)
+Upload your QC test result file. The file should include the following columns:
+- 항목명 (Item)
 - 측정값 (Measured Value)
 - 기준하한 (Lower Limit)
 - 기준상한 (Upper Limit)
@@ -35,93 +33,90 @@ This tool automatically evaluates QC test results, detects outliers using Z-scor
 
 uploaded_file = st.file_uploader("📁 Upload QC Test File (CSV or Excel)", type=["csv", "xlsx"])
 
-if uploaded_file is not None:
+if uploaded_file:
     try:
         if uploaded_file.name.endswith("csv"):
-            try:
-                df = pd.read_csv(uploaded_file, encoding="utf-8-sig")
-            except UnicodeDecodeError:
-                df = pd.read_csv(uploaded_file, encoding="utf-8")
+            df = pd.read_csv(uploaded_file, encoding="utf-8-sig")
         else:
             df = pd.read_excel(uploaded_file)
     except Exception as e:
-        st.error(f"Error loading file: {e}")
+        st.error(f"Failed to load file: {e}")
         st.stop()
 
-    expected_columns = ["항목명", "측정값", "기준하한", "기준상한"]
-    if not all(col in df.columns for col in expected_columns):
-        st.error("❌ Column names are incorrect. Please refer to the sample file.")
+    required_cols = ["항목명", "측정값", "기준하한", "기준상한"]
+    if not all(col in df.columns for col in required_cols):
+        st.error("❌ Required columns are missing.")
         st.stop()
 
-    st.success("✅ File loaded successfully.")
-    st.dataframe(df)
-
-    # 결과 판단 + 이상치 계산
-    def assess_row(row):
-        if row["측정값"] < row["기준하한"] or row["측정값"] > row["기준상한"]:
-            return "Fail"
-        return "Pass"
-
-    df["Result"] = df.apply(assess_row, axis=1)
+    # 판정 및 Z-score 계산
+    df["Result"] = df.apply(lambda r: "Pass" if r["기준하한"] <= r["측정값"] <= r["기준상한"] else "Fail", axis=1)
     df["Z-score"] = zscore(df["측정값"])
     df["Outlier"] = df["Z-score"].apply(lambda z: "Yes" if abs(z) > 2 else "")
 
-    st.markdown("### 📊 Judgment Result")
+    st.success("✅ File loaded and processed.")
     st.dataframe(df)
 
+    # 그래프
     st.markdown("### 📈 Z-score Outlier Detection")
     fig, ax = plt.subplots()
     ax.bar(df["항목명"], df["Z-score"])
-    ax.axhline(2, color="red", linestyle="--", label="Z=2")
+    ax.axhline(2, color="red", linestyle="--")
     ax.axhline(-2, color="red", linestyle="--")
     ax.set_ylabel("Z-score")
-    ax.set_title("Outlier Detection by Z-score")
-    ax.legend()
+    ax.set_title("Outlier Detection")
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # PDF 항목명 깨짐 방지 처리
-    def sanitize_name(name):
-        try:
-            name.encode('latin-1')
-            return name
-        except UnicodeEncodeError:
-            return re.sub(r'[^\x00-\x7F]+', '_', name)
+    # PDF 생성 함수
+    def generate_summary_pdf(df):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+        styles = getSampleStyleSheet()
+        elements = []
 
-    def generate_pdf_table(dataframe):
-        buffer = io.BytesIO()
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=10)
-        pdf.cell(0, 10, "QC Test Summary Report", ln=True, align="C")
-        pdf.ln(5)
+        elements.append(Paragraph("<b>Test Result Summary Report</b>", styles["Title"]))
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph("Product: Acetaminophen", styles["Normal"]))
+        elements.append(Paragraph(f"Test Date: {datetime.today().strftime('%Y-%m-%d')}", styles["Normal"]))
+        elements.append(Spacer(1, 10))
 
-        # 표 헤더
-        col_widths = [40, 25, 25, 25, 25, 20]
-        headers = ["Test Item", "Value", "Lower", "Upper", "Result", "Outlier"]
-        for i, h in enumerate(headers):
-            pdf.cell(col_widths[i], 8, h, border=1, align='C')
-        pdf.ln()
+        total = len(df)
+        passed = (df["Result"] == "Pass").sum()
+        failed = (df["Result"] == "Fail").sum()
 
-        # 표 내용
-        for _, row in dataframe.iterrows():
-            row_data = [
-                sanitize_name(str(row["항목명"])),
+        elements.append(Paragraph(f"Total test items: {total}", styles["Normal"]))
+        elements.append(Paragraph(f"Passed: {passed}", styles["Normal"]))
+        elements.append(Paragraph(f"Failed: {failed}", styles["Normal"]))
+        elements.append(Spacer(1, 15))
+
+        table_data = [["Item", "Value", "Spec (Low ~ High)", "Result"]]
+        for _, row in df.iterrows():
+            table_data.append([
+                str(row["항목명"]),
                 str(row["측정값"]),
-                str(row["기준하한"]),
-                str(row["기준상한"]),
-                str(row["Result"]),
-                str(row["Outlier"])
-            ]
-            for i, val in enumerate(row_data):
-                pdf.cell(col_widths[i], 8, val.encode('latin-1', 'replace').decode('latin-1'), border=1)
-            pdf.ln()
+                f"{row['기준하한']} ~ {row['기준상한']}",
+                row["Result"]
+            ])
 
-        pdf_output = pdf.output(dest='S').encode('latin-1')
-        buffer.write(pdf_output)
+        table = Table(table_data, colWidths=[100, 60, 120, 60])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(table)
+        doc.build(elements)
         buffer.seek(0)
         return buffer
 
-    pdf_buffer = generate_pdf_table(df)
-    st.download_button("📄 Download PDF Report", data=pdf_buffer, file_name="qc_report.pdf")
-
+    # PDF 다운로드 버튼
+    pdf_buffer = generate_summary_pdf(df)
+    st.download_button(
+        label="📄 Download Summary PDF",
+        data=pdf_buffer,
+        file_name="qc_summary_report.pdf",
+        mime="application/pdf"
+    )
