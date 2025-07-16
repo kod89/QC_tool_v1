@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -43,14 +44,14 @@ if uploaded_file:
         st.error(f"Failed to load file: {e}")
         st.stop()
 
-    required_cols = ["항목명", "측정값", "기준하한", "기준상한"]
+    required_cols = ["Item", "Value", "Lower Limit", "Upper Limit"]
     if not all(col in df.columns for col in required_cols):
         st.error("❌ Required columns are missing.")
         st.stop()
 
     # 판정 및 Z-score 계산
-    df["Result"] = df.apply(lambda r: "Pass" if r["기준하한"] <= r["측정값"] <= r["기준상한"] else "Fail", axis=1)
-    df["Z-score"] = zscore(df["측정값"])
+    df["Result"] = df.apply(lambda r: "Pass" if r["Lower Limit"] <= r["Value"] <= r["Upper Limit"] else "Fail", axis=1)
+    df["Z-score"] = zscore(df["Value"])
     df["Outlier"] = df["Z-score"].apply(lambda z: "Yes" if abs(z) > 2 else "")
 
     st.success("✅ File loaded and processed.")
@@ -59,7 +60,7 @@ if uploaded_file:
     # 그래프
     st.markdown("### 📈 Z-score Outlier Detection")
     fig, ax = plt.subplots()
-    ax.bar(df["항목명"], df["Z-score"])
+    ax.bar(df["Item"], df["Z-score"])
     ax.axhline(2, color="red", linestyle="--")
     ax.axhline(-2, color="red", linestyle="--")
     ax.set_ylabel("Z-score")
@@ -92,8 +93,8 @@ if uploaded_file:
         table_data = [["Item", "Value", "Spec (Low ~ High)", "Result"]]
         for _, row in df.iterrows():
             table_data.append([
-                str(row["항목명"]),
-                str(row["측정값"]),
+                str(row["Item"]),
+                str(row["Value"]),
                 f"{row['기준하한']} ~ {row['기준상한']}",
                 row["Result"]
             ])
