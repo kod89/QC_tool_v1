@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,6 +21,13 @@ with open("sample_qc_data_utf8sig.csv", "rb") as f:
 st.markdown("""
 이 도구는 시험 성적서를 자동으로 검토하고 이상치를 시각화하며, 결과를 PDF 보고서로 요약해줍니다.  
 샘플 데이터를 다운로드한 후 업로드하여 기능을 체험해보세요.
+
+**💡 입력 파일은 다음과 같은 열을 포함해야 합니다:**
+
+- 항목명
+- 측정값
+- 기준하한
+- 기준상한
 """)
 
 # 파일 업로드
@@ -38,7 +46,7 @@ if uploaded_file is not None:
         st.error(f"파일을 불러오는 중 오류 발생: {e}")
         st.stop()
 
-    expected_columns = ["시험 항목", "기준 하한값", "기준 상한값", "측정값"]
+    expected_columns = ["항목명", "측정값", "기준하한", "기준상한"]
     if not all(col in df.columns for col in expected_columns):
         st.error("❌ 파일의 열 이름이 올바르지 않습니다. 샘플 파일 양식을 참고해주세요.")
         st.stop()
@@ -48,7 +56,7 @@ if uploaded_file is not None:
 
     # 적합/부적합 판정
     def assess_row(row):
-        if row["측정값"] < row["기준 하한값"] or row["측정값"] > row["기준 상한값"]:
+        if row["측정값"] < row["기준하한"] or row["측정값"] > row["기준상한"]:
             return "부적합"
         return "적합"
 
@@ -65,7 +73,7 @@ if uploaded_file is not None:
     # 그래프
     st.markdown("### 📈 이상치 시각화")
     fig, ax = plt.subplots()
-    ax.bar(df["시험 항목"], df["Z-score"])
+    ax.bar(df["항목명"], df["Z-score"])
     ax.axhline(2, color="red", linestyle="--", label="Z=2")
     ax.axhline(-2, color="red", linestyle="--")
     ax.set_ylabel("Z-score")
@@ -83,7 +91,7 @@ if uploaded_file is not None:
         pdf.ln(10)
 
         for i, row in dataframe.iterrows():
-            text = f"{row['시험 항목']}: 측정값={row['측정값']} → 판정={row['판정']} {row['이상치 여부']}"
+            text = f"{row['항목명']}: 측정값={row['측정값']} → 판정={row['판정']} {row['이상치 여부']}"
             pdf.cell(200, 10, txt=text, ln=True)
 
         pdf.output(buffer)
