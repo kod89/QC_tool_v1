@@ -86,7 +86,7 @@ if uploaded_file is not None:
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # PDF generation
+    # PDF generation (fixed)
     def generate_pdf(dataframe):
         buffer = io.BytesIO()
         pdf = FPDF()
@@ -100,7 +100,8 @@ if uploaded_file is not None:
             text = text.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(200, 10, txt=text, ln=True)
 
-        pdf.output(buffer)
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+        buffer.write(pdf_output)
         buffer.seek(0)
         return buffer
 
