@@ -143,4 +143,16 @@ if uploaded_file:
             ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
-        elem
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    # PDF 다운로드
+    pdf_buffer = generate_summary_pdf(df)
+    st.download_button(
+        label="📄 Download Summary PDF",
+        data=pdf_buffer,
+        file_name="qc_summary_report.pdf",
+        mime="application/pdf"
+    )
