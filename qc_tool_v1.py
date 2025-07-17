@@ -13,6 +13,7 @@ import os
 st.set_page_config(page_title="QC Report Analyzer", layout="centered")
 st.title("🧪 QC Test Report Analyzer")
 
+# 샘플 파일 다운로드
 sample_path = "sample_qc_data_utf8sig.csv"
 if os.path.exists(sample_path):
     with open(sample_path, "rb") as f:
@@ -23,7 +24,8 @@ if os.path.exists(sample_path):
             mime="text/csv"
         )
 
-st.markdown("""Upload your QC test result file. The file must include the following columns:
+st.markdown("""
+Upload your QC test result file. The file must include the following columns:
 - Item
 - Value
 - Lower Limit
@@ -42,7 +44,7 @@ if uploaded_file:
         st.error(f"Failed to load file: {e}")
         st.stop()
 
-    # Auto rename from Korean to English if necessary
+    # 한글 컬럼명 자동 변환
     rename_dict = {
         "항목명": "Item",
         "측정값": "Value",
@@ -54,10 +56,10 @@ if uploaded_file:
     required_cols = ["Item", "Value", "Lower Limit", "Upper Limit"]
     if not all(col in df.columns for col in required_cols):
         st.error("❌ Required columns are missing.")
-        st.write("Columns found:", df.columns.tolist())  # Debugging output
+        st.write("Columns found:", df.columns.tolist())
         st.stop()
 
-    # Evaluation and Z-score
+    # 결과 처리
     df["Result"] = df.apply(lambda r: "Pass" if r["Lower Limit"] <= r["Value"] <= r["Upper Limit"] else "Fail", axis=1)
     df["Z-score"] = zscore(df["Value"])
     df["Outlier"] = df["Z-score"].apply(lambda z: "Yes" if abs(z) > 2 else "")
@@ -65,7 +67,7 @@ if uploaded_file:
     st.success("✅ File loaded and processed.")
     st.dataframe(df)
 
-    # Plot
+    # Z-score 그래프
     st.markdown("### 📈 Z-score Outlier Detection")
     fig, ax = plt.subplots()
     ax.bar(df["Item"], df["Z-score"])
@@ -76,7 +78,28 @@ if uploaded_file:
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # PDF summary generator
+    # 분석 결과에 따른 요약 문장 생성 함수
+    def generate_summary_sentence(df):
+        total = len(df)
+        failed_items = df[df["Result"] == "Fail"]
+        outliers = df[df["Outlier"] == "Yes"]
+
+        sentences = [f"A total of {total} items were tested."]
+        if not failed_items.empty:
+            items = ", ".join(failed_items["Item"].tolist())
+            sentences.append(f"The following items failed to meet specifications: {items}.")
+        else:
+            sentences.append("All items passed the specification criteria.")
+
+        if not outliers.empty:
+            outlier_list = ", ".join(outliers["Item"].tolist())
+            sentences.append(f"Statistical anomalies (outliers) were detected in: {outlier_list}.")
+        else:
+            sentences.append("No significant statistical outliers were detected.")
+
+        return " ".join(sentences)
+
+    # PDF 생성 함수
     def generate_summary_pdf(df):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
@@ -96,6 +119,10 @@ if uploaded_file:
         elements.append(Paragraph(f"Total test items: {total}", styles["Normal"]))
         elements.append(Paragraph(f"Passed: {passed}", styles["Normal"]))
         elements.append(Paragraph(f"Failed: {failed}", styles["Normal"]))
+        elements.append(Spacer(1, 10))
+
+        summary_sentence = generate_summary_sentence(df)
+        elements.append(Paragraph(f"<b>Summary:</b> {summary_sentence}", styles["Normal"]))
         elements.append(Spacer(1, 15))
 
         table_data = [["Item", "Value", "Spec (Low ~ High)", "Result"]]
@@ -116,16 +143,4 @@ if uploaded_file:
             ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
-        elements.append(table)
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer
-
-    # PDF download
-    pdf_buffer = generate_summary_pdf(df)
-    st.download_button(
-        label="📄 Download Summary PDF",
-        data=pdf_buffer,
-        file_name="qc_summary_report.pdf",
-        mime="application/pdf"
-    )
+        elem
